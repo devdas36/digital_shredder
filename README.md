@@ -14,6 +14,10 @@ This digital file shredder provides secure file deletion by overwriting data wit
 - **Thread-Safe Operations:** Implements proper synchronization to ensure data integrity
 - **Real-time Progress Tracking:** Displays thread status and performance metrics
 - **Safety Confirmations:** Requires user confirmation before destructive operations
+- **Optional Deletion:** User decides whether to delete the file after shredding
+- **SSD Detection:** Automatically detects SSD storage devices (Windows & Linux)
+- **TRIM Support:** Issues TRIM commands on SSDs to properly free space and minimize forensic traces
+- **Cross-Platform:** Works on both Windows and Linux operating systems
 
 ## Project Structure
 
@@ -28,12 +32,18 @@ digital_shredder/
 
 - **Compiler:** g++ with C++17 support
 - **Libraries:** OpenMP (typically included with g++)
-- **Platform:** Linux/Unix-based systems
+- **Platform:** Windows or Linux
 - **Build Tools:** Make (optional)
 
 ## Compilation
 
-### Linux/macOS
+### Windows
+
+```bash
+g++ -std=c++17 -Wall -Wextra -fopenmp -O2 main.cpp utils.cpp -o shredder.exe
+```
+
+### Linux
 
 ```bash
 g++ -std=c++17 -Wall -Wextra -fopenmp -O2 main.cpp utils.cpp -o shredder
@@ -48,6 +58,10 @@ make
 ## Usage
 
 ```bash
+# Windows
+./shredder.exe <file_path> <passes> [threads]
+
+# Linux
 ./shredder <file_path> <passes> [threads]
 ```
 
@@ -169,7 +183,8 @@ The shredder includes multiple safety mechanisms:
    - Confirms it's a regular file (not a directory or special file)
    - Checks write permissions
    - Validates non-zero file size
-4. **Abort Capability:** User can safely cancel before any data modification occurs
+4. **Optional Deletion:** After shredding, user chooses whether to delete the file or keep it
+5. **Abort Capability:** User can safely cancel before any data modification occurs
 
 ## Technical Implementation
 
@@ -196,9 +211,67 @@ The shredder includes multiple safety mechanisms:
 ⚠️ **Critical Information:**
 
 1. **Irreversible Data Destruction:** This tool PERMANENTLY overwrites data. Files cannot be recovered after shredding.
-2. **SSD Limitations:** Modern SSDs with wear-leveling may retain data fragments despite overwriting. For maximum security on SSDs, combine with full-disk encryption and consider physical destruction for highly sensitive data.
-3. **Platform Compatibility:** Designed for Linux/Unix systems. Windows support would require modifications to file I/O operations.
-4. **Use Responsibly:** Always verify the target file path before confirming the operation.
+
+2. **SSD Wear-Leveling:** Modern SSDs use wear-leveling which redirects writes to different physical locations. This tool addresses this by:
+   - Detecting SSD storage devices automatically (both Windows and Linux)
+   - Issuing TRIM commands after overwriting to mark space as unused
+   - Allowing the SSD controller to properly deallocate blocks
+   - Minimizing forensic traces by freeing the space
+   
+   **SSD Limitations:** Even with TRIM support, SSDs have inherent limitations:
+   - **Firmware Control:** The SSD's firmware decides when to actually erase physical blocks
+   - **Over-Provisioning:** SSDs maintain extra hidden space; data may persist there
+   - **Reserved Blocks:** Some blocks are reserved for wear-leveling and may contain old data
+   - **TRIM Timing:** The physical erasure happens asynchronously, not immediately
+   
+   **Maximum Security for SSDs:**
+   - Use hardware-based secure erase commands (ATA Secure Erase)
+   - Enable full-disk encryption before storing sensitive data
+   - Consider physical destruction for mission-critical security
+   
+3. **Optional File Deletion:** After shredding, you choose whether to delete the file:
+   - **If deleted:** Disk space is freed and garbage data is removed to prevent space waste
+   - **If kept:** The overwritten file remains on disk for verification or other purposes
+
+4. **Platform Compatibility:** 
+   - **Windows:** Uses `DeviceIoControl` with `FSCTL_FILE_LEVEL_TRIM` for TRIM operations
+   - **Linux:** Uses `/sys/block/*/queue/rotational` for detection and `fallocate()` with `FALLOC_FL_PUNCH_HOLE` for TRIM
+   
+5. **Use Responsibly:** Always verify the target file path before confirming the operation.
+
+## How It Works: Security Features
+
+### Issues Addressed
+
+**1. Garbage Data Space Problem:**
+- After overwriting, garbage values previously remained on disk, wasting space
+- Solution: Optional file deletion frees space and removes forensic traces
+
+**2. SSD Wear-Leveling Problem:**
+- SSDs don't overwrite data in-place; they write to new locations
+- Solution: TRIM commands inform the SSD controller to deallocate and eventually erase old blocks
+
+### Storage-Specific Handling
+
+**For HDDs:**
+- Overwrites data with multiple passes
+- If deleted, frees space immediately
+- Garbage data is removed from disk
+
+**For SSDs:**
+- Overwrites data (physical location may change due to wear-leveling)
+- Issues TRIM commands to mark logical blocks as unused
+- SSD controller performs garbage collection asynchronously
+- Reduces forensic traces and prevents space waste
+
+### Secure Deletion Workflow
+
+1. **Shred Phase:** Overwrite file with multiple passes (0x00, 0xFF, random data)
+2. **User Prompt:** Choose whether to delete the file
+3. **Detection Phase:** Determine if storage is SSD or HDD (if deleting)
+4. **TRIM Phase:** Issue TRIM/DISCARD commands (SSD only)
+5. **Deletion Phase:** Remove file from file system
+6. **Verification:** Confirm deletion and space freeing
 
 ## Use Cases
 
@@ -212,11 +285,20 @@ The shredder includes multiple safety mechanisms:
 
 Contributions are welcome! Areas for improvement:
 
-- Windows platform support
 - Additional overwrite patterns (DoD 5220.22-M, Gutmann method)
-- File system secure deletion after overwriting
+- Hardware-based secure erase integration (ATA Secure Erase)
 - Progress bars and improved UI
 - Batch file processing
+- Support for NVMe-specific sanitize commands
+- macOS support
+
+## References
+
+- [OpenMP Specification](https://www.openmp.org/)
+- [Windows DeviceIoControl API](https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol)
+- [Linux fallocate System Call](https://man7.org/linux/man-pages/man2/fallocate.2.html)
+- [TRIM Command Overview](https://en.wikipedia.org/wiki/Trim_(computing))
+- [SSD Wear-Leveling](https://en.wikipedia.org/wiki/Wear_leveling)
 
 ## License
 

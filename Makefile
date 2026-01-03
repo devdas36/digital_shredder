@@ -1,5 +1,4 @@
 # Parallel Digital Shredder Makefile
-# Author: Devdas
 
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -fopenmp -O2

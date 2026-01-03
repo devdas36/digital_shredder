@@ -8,10 +8,23 @@
 #include <cstdlib>
 #include <cstring>
 #include <omp.h>
+#include <iostream>
+#include <iomanip>
 
 using namespace std;
 
+// Global progress tracking
+static volatile long total_bytes_processed = 0;
+static long total_bytes_to_process = 0;
+static int current_pass = 0;
+static int total_passes = 0;
+
+// Function declarations
 void fill_random_bytes(unsigned char* buffer, long size);
+bool is_ssd(const char* path);
+bool secure_delete_file(const char* path, bool is_ssd_device, long file_size);
+void display_progress_bar(int percentage, int pass, int total_passes);
+void format_bytes(long bytes, char* buffer, size_t buffer_size);
 
 void shred_chunk(FILE* file, long start_offset, long chunk_size, int passes) {
     const long BUFFER_SIZE = 1024 * 1024; // 1 MB
@@ -61,12 +74,33 @@ void shred_chunk(FILE* file, long start_offset, long chunk_size, int passes) {
 
             current_offset += bytes_to_write;
             bytes_remaining -= bytes_to_write;
+            
+            // Update progress
+            #pragma omp atomic
+            total_bytes_processed += bytes_to_write;
         }
 
         fflush(file);
     }
 
     delete[] buffer;
+}
+
+void display_progress_bar(int, int, int) {
+    // Simple percentage display without bulky bar
+    return;
+}
+
+void format_bytes(long bytes, char* buffer, size_t buffer_size) {
+    if (bytes < 1024) {
+        snprintf(buffer, buffer_size, "%ld B", bytes);
+    } else if (bytes < 1024 * 1024) {
+        snprintf(buffer, buffer_size, "%.2f KB", bytes / 1024.0);
+    } else if (bytes < 1024 * 1024 * 1024) {
+        snprintf(buffer, buffer_size, "%.2f MB", bytes / (1024.0 * 1024.0));
+    } else {
+        snprintf(buffer, buffer_size, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+    }
 }
 
 #endif // SHREDDER_H
